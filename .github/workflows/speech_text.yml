@@ -3,7 +3,7 @@ name: speech to text
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 */3 * * *"
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -29,4 +29,4 @@ jobs:
           pip install -r requirements.txt
       - name: speech to text
         run: |
-          python -u scripts/speech_text.py
+          speech_text
