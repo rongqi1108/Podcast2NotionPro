@@ -36,82 +36,42 @@ jobs:
         REF: ${{ github.ref }}                          # Git引用（分支/tag）
         REPOSITORY: ${{ github.repository }}            # 当前仓库名称
 
-    # 任务步骤定义
     steps:
-      # 第一步：检出仓库代码
       - name: Checkout
-        uses: actions/checkout@v3  # 官方检出动作
+        uses: actions/checkout@v3
 
-      # 设置Python环境
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.9  # 指定Python版本
-
-      # 安装Python依赖
+          python-version: 3.9
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip  # 升级pip
-          pip install -r requirements.txt     # 安装依赖包
-
-      # 执行播客同步脚本
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
       - name: podcast sync
         run: |
           podcast
-        # 运行自定义的播客同步命令
-
-      # 设置默认年份（如果未提供YEAR变量）
       - name: Set default year if not provided
-        run: echo "YEAR=$(date +"%Y")" >> $GITHUB_ENV  # 获取当前年份
-        if: env.YEAR == ''  # 仅当YEAR为空时执行
-
-      # 生成Notion热力图数据
+        run: echo "YEAR=$(date +"%Y")" >> $GITHUB_ENV
+        if: env.YEAR == ''
       - name: notion heatmap
         run: |
-          github_heatmap notion \
-            --notion_token "${{secrets.NOTION_TOKEN}}" \
-            --database_id "${{ env.DATABASE_ID }}" \
-            --date_prop_name "日期" \
-            --value_prop_name "数量" \
-            --unit "期" \
-            --year $YEAR \
-            --me "${{secrets.NAME}}" \
-            --without-type-name \
-            --background-color=${{ vars.background_color||'#FFFFFF'}} \
-            --track-color=${{ vars.track_color||'#ACE7AE'}} \
-            --special-color1=${{ vars.special_color||'#69C16E'}} \
-            --special-color2=${{ vars.special_color2||'#549F57'}} \
-            --dom-color=${{ vars.dom_color||'#EBEDF0'}} \
-            --text-color=${{ vars.text_color||'#000000'}}
-
-      # 重命名生成的热力图文件（避免缓存问题）
+          github_heatmap notion  --notion_token "${{secrets.NOTION_TOKEN}}" --database_id "${{ env.DATABASE_ID }}" --date_prop_name "日期" --value_prop_name "数量" --unit "期" --year $YEAR  --me "${{secrets.NAME}}" --without-type-name --background-color=${{ vars.background_color||'#FFFFFF'}} --track-color=${{ vars.track_color||'#ACE7AE'}} --special-color1=${{ vars.special_color||'#69C16E'}} --special-color2=${{ vars.special_color2||'#549F57'}} --dom-color=${{ vars.dom_color||'#EBEDF0'}} --text-color=${{ vars.text_color||'#000000'}}
       - name: Rename notion.svg to a random name
         run: |
           cd OUT_FOLDER
-        # 清理旧文件（保留notion.svg）
           find . -type f ! -name "notion.svg" -exec rm -f {} +
           cd ..
-        # 生成随机文件名（使用UUID）
           RANDOM_FILENAME=$(uuidgen).svg
-        # 重命名文件
           mv ./OUT_FOLDER/notion.svg ./OUT_FOLDER/$RANDOM_FILENAME
           echo "Renamed file to $RANDOM_FILENAME"
-
-      # 提交代码变更
       - name: push
         run: |
-        # 配置Git用户信息（使用GitHub Actions的默认身份）
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-        # 添加所有变更
           git add .
-        # 提交变更（如果无变更则不报错）
           git commit -m 'add new heatmap' || echo "nothing to commit"
-        # 推送变更（如果无变更则不报错）
           git push || echo "nothing to push"
-
-      # 更新热力图数据
-      - name: update heatmap
+      - name: udpate heatmap
         run: |
             update_heatmap
-        # 运行自定义的热力图更新命令
