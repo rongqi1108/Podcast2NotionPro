@@ -5,10 +5,11 @@ name: speech to text
 on:
   # 允许在 GitHub 界面上手动触发此工作流
   workflow_dispatch:
-  
-  # 设置定时任务，每3小时自动运行一次（UTC时间）
+
+  # 定时任务配置（每3小时运行一次）0 */3 * * *
+  # 北京时间早上4点 = UTC时间前一天的20点（夏令时）或21点（冬令时）
   schedule:
-    - cron: "0 */3 * * *"  # 分钟 小时 日 月 星期
+    - cron: "0 20 * * *" # 分钟 小时 日 月 星期
 
 # 并发控制配置
 concurrency:
