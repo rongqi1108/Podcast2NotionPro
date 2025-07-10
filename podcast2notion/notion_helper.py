@@ -20,13 +20,18 @@ from podcast2notion.utils import (
     get_title,
 )
 
+import yaml
+
+# 图标URL
 TAG_ICON_URL = "https://www.notion.so/icons/tag_gray.svg"
 USER_ICON_URL = "https://www.notion.so/icons/user-circle-filled_gray.svg"
 TARGET_ICON_URL = "https://www.notion.so/icons/target_red.svg"
 BOOKMARK_ICON_URL = "https://www.notion.so/icons/bookmark_gray.svg"
 
 
+# Notion 数据库操作助手类，封装常用Notion API操作
 class NotionHelper:
+    # 数据库名称映射字典
     database_name_dict = {
         "PODCAST_DATABASE_NAME": "Podcast",
         "EPISODE_DATABASE_NAME": "Episode",
@@ -34,18 +39,29 @@ class NotionHelper:
         "AUTHOR_DATABASE_NAME": "Author",
         "MINDMAP_DATABASE_NAME": "思维导图",
     }
-    database_id_dict = {}
-    heatmap_block_id = None
-    property_dict = {}
+    database_id_dict = {}  # 存储数据库ID缓存
+    heatmap_block_id = None  # 热力图区块ID
+    property_dict = {}  # 存储数据库属性结构
 
+    # 初始化Notion客户端和数据库连接
     def __init__(self):
-        self.client = Client(auth=os.getenv("NOTION_TOKEN").strip(), log_level=logging.ERROR)
-        self.__cache = {}
-        self.page_id = self.extract_page_id(os.getenv("NOTION_PAGE").strip())
-        self.search_database(self.page_id)
-        for key in self.database_name_dict.keys():
-            if os.getenv(key) != None and os.getenv(key) != "":
-                self.database_name_dict[key] = os.getenv(key)
+        #  # GitHub Actions环境从环境变量读取
+        if os.getenv('GITHUB_ACTIONS') == 'true':
+            self.client = Client(auth=os.getenv("NOTION_TOKEN").strip(), log_level=logging.ERROR)
+            self.page_id = self.extract_page_id(os.getenv("NOTION_PAGE").strip())
+            # 覆盖默认数据库名称（如果环境变量有设置）
+            for key in self.database_name_dict.keys():
+                if os.getenv(key) != None and os.getenv(key) != "":
+                    self.database_name_dict[key] = os.getenv(key)
+        else:
+            # # 本地开发环境从YAML文件读取
+            with open('local_config.yml', 'r', encoding='utf-8') as file:
+                config = yaml.safe_load(file)
+            self.client = Client(auth=config['NOTION_TOKEN'].strip(), log_level=logging.ERROR)
+            self.page_id = self.extract_page_id(config["NOTION_PAGE"].strip())
+        self.__cache = {} # 关系ID缓存
+        self.search_database(self.page_id)  # 搜索并缓存所有数据库
+        # 初始化各数据库ID
         self.episode_database_id = self.database_id_dict.get(
             self.database_name_dict.get("EPISODE_DATABASE_NAME")
         )
@@ -61,6 +77,7 @@ class NotionHelper:
         self.mindmap_database_id = self.database_id_dict.get(
             self.database_name_dict.get("MINDMAP_DATABASE_NAME")
         )
+        # 获取Episode数据库属性结构
         r = self.client.databases.retrieve(database_id=self.episode_database_id)
         for key, value in r.get("properties").items():
             self.property_dict[key] = value
@@ -79,34 +96,44 @@ class NotionHelper:
         self.all_database_id = self.get_relation_database_id(
             self.property_dict.get("全部")
         )
+        # 初始化数据库结构
         if self.day_database_id:
             self.write_database_id(self.day_database_id)
         if self.podcast_database_id:
             self.update_database(self.podcast_database_id)
         if self.episode_database_id:
             self.update_database(self.episode_database_id)
+
+    # 更新数据库结构（添加缺失属性）   要更新的数据库ID
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def update_database(self,database_id):
-        """更新数据库"""
         response = self.client.databases.retrieve(database_id=database_id)
         id = response.get("id")
         properties = response.get("properties")
         update_properties = {}
+        # 检查并添加"通义链接"属性（如果不存在）
         if (
             properties.get("通义链接") is None
             or properties.get("通义链接").get("type") != "url"
         ):
             update_properties["通义链接"] = {"url": {}}
+        # 执行更新（如果有需要更新的属性）
         if len(update_properties) > 0:
             self.client.databases.update(database_id=id, properties=update_properties)
+
+    # 从relation属性中提取目标数据库ID  数据库属性对象  return 关联的数据库ID
     def get_relation_database_id(self, property):
         return property.get("relation").get("database_id")
 
+    # 将数据库ID写入GitHub Actions环境文件  要写入的数据库ID
     def write_database_id(self, database_id):
-        env_file = os.getenv('GITHUB_ENV')
-        # 将值写入环境文件
-        with open(env_file, "a") as file:
-            file.write(f"DATABASE_ID={database_id}\n")
+        if os.getenv('GITHUB_ACTIONS') == 'true':
+            env_file = os.getenv('GITHUB_ENV')
+            # 将值写入环境文件
+            with open(env_file, "a") as file:
+                file.write(f"DATABASE_ID={database_id}\n")
+
+    # 从Notion URL中提取32位页面ID
     def extract_page_id(self, notion_url):
         # 正则表达式匹配 32 个字符的 Notion page_id
         match = re.search(
@@ -118,11 +145,12 @@ class NotionHelper:
         else:
             raise Exception(f"获取NotionID失败，请检查输入的Url是否正确")
 
+    # 递归搜索页面下的所有数据库并缓存ID  block_id: 要搜索的页面/区块ID
     def search_database(self, block_id):
         children = self.client.blocks.children.list(block_id=block_id)["results"]
         # 遍历子块
         for child in children:
-            # 检查子块的类型
+            # 检查子块的类型  缓存子数据库
             if child["type"] == "child_database":
                 self.database_id_dict[child.get("child_database").get("title")] = (
                     child.get("id")
@@ -134,6 +162,7 @@ class NotionHelper:
             if "has_children" in child and child["has_children"]:
                 self.search_database(child["id"])
 
+    # 更新图片区块的URL
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def update_image_block_link(self, block_id, new_image_url):
         # 更新 image block 的链接
@@ -349,6 +378,8 @@ class NotionHelper:
                 self.get_day_relation_id(date),
             ]
         )
+
+    # 更新热力图区块URL
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def update_heatmap(self, block_id, url):
         # 更新 image block 的链接

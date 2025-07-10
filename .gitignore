@@ -3,3 +3,6 @@
 .venv
 podcast2notion/__pycache__/
 a
+/podcast2notion/local_config.yml
+/podcast2notion/podcast_local.py
+/podcast2notion/__pycache__
