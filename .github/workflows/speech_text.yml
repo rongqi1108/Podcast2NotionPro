@@ -1,32 +1,66 @@
+# 工作流名称：语音转文字任务
 name: speech to text
 
+# 触发条件配置
 on:
+  # 允许在 GitHub 界面上手动触发此工作流
   workflow_dispatch:
+  
+  # 设置定时任务，每3小时自动运行一次（UTC时间）
   schedule:
-    - cron: "0 */3 * * *"
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-jobs:
-  sync:
-    name: Sync
-    runs-on: ubuntu-latest
-    env:
-        NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        NOTION_PAGE: ${{ secrets.NOTION_PAGE }}
-        COOKIE: ${{ secrets.TONGYI_COOKIE }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - cron: "0 */3 * * *"  # 分钟 小时 日 月 星期
 
+# 并发控制配置
+concurrency:
+  # 并发组标识，格式为"工作流名称-Git引用(分支/tag)"
+  group: ${{ github.workflow }}-${{ github.ref }}
+  
+  # 当有新工作流运行时，自动取消同一组的进行中任务
+  cancel-in-progress: true
+
+# 工作流任务定义
+jobs:
+  # 主任务：语音转文字处理
+  sync:
+    name: Sync  # 任务显示名称
+    runs-on: ubuntu-latest  # 使用最新版Ubuntu运行环境
+    
+    # 环境变量配置
+    env:
+      # Notion 相关凭证（从GitHub Secrets获取）
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}    # Notion API 访问令牌
+      NOTION_PAGE: ${{ secrets.NOTION_PAGE }}      # 目标Notion页面ID
+      
+      # 语音服务认证凭证
+      COOKIE: ${{ secrets.TONGYI_COOKIE }}         # 通义语音API的认证Cookie
+
+    # 任务执行步骤
+    steps:
+      # 步骤1：检出仓库代码
+      - name: Checkout
+        uses: actions/checkout@v3  # 使用官方checkout action
+        # 注意：默认检出当前触发工作流的提交版本
+
+      # 步骤2：设置Python环境
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v4  # 官方Python环境配置
         with:
-          python-version: 3.9
+          python-version: 3.9  # 指定使用Python 3.9版本
+          # 注意：会自动从GitHub的工具缓存中下载Python
+
+      # 步骤3：安装Python依赖   首先升级pip包管理器 然后安装requirements.txt中列出的所有依赖 依赖会被缓存以加速后续运行
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
+        run: |  # 多行命令
+          python -m pip install --upgrade pip 
           pip install -r requirements.txt
+  
+
+      # 步骤4：执行语音转文字处理 执行自定义的语音处理脚本
       - name: speech to text
         run: |
           speech_text
+        # 注意：此命令应该是您仓库中的一个可执行脚本或模块
+        # 建议脚本包含以下功能：
+        # 1. 从指定源获取语音文件
+        # 2. 调用语音识别API（使用上面的COOKIE认证）
+        # 3. 将结果保存到Notion（使用NOTION_TOKEN和NOTION_PAGE）

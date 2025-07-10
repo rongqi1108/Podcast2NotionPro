@@ -1,3 +1,5 @@
 .env
+.idea
+.venv
 podcast2notion/__pycache__/
 a
